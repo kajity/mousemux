@@ -1,7 +1,7 @@
 # AGENTS.md
 
 ## Project
-ex-g-pro-remapper
+mousemux
 
 ## Mission
 Linux 上で動く Rust 製の常駐デーモンを実装する。

@@ -1,4 +1,4 @@
-# ex-g-pro-remapper 設計メモ
+# mousemux 設計メモ
 
 ## 1. 設計方針
 
@@ -229,14 +229,14 @@ After=systemd-udevd.service
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/ex-g-pro-remapper --config /etc/ex-g-pro-remapper/config.yaml
+ExecStart=/usr/local/bin/mousemux --config /etc/mousemux/config.yaml
 Restart=on-failure
 RestartSec=2
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/etc/ex-g-pro-remapper
+ReadWritePaths=/etc/mousemux
 StandardOutput=journal
 StandardError=journal
 

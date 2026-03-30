@@ -1,4 +1,4 @@
-# ex-g-pro-remapper 要件定義書
+# mousemux 要件定義書
 
 ## 1. 目的
 

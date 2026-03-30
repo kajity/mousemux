@@ -1,18 +1,18 @@
 [Unit]
-Description=Mouse to keyboard remapper daemon
+Description=Mouse-to-keyboard remapper daemon
 After=systemd-udevd.service
 
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/ex-g-pro-remapper --config /etc/ex-g-pro-remapper/config.yaml
+ExecStart=/usr/local/bin/mousemux --config /etc/mousemux/config.yaml
 Restart=on-failure
 RestartSec=2
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectHome=yes
 ProtectSystem=strict
-ReadOnlyPaths=/etc/ex-g-pro-remapper
+ReadOnlyPaths=/etc/mousemux
 StandardOutput=journal
 StandardError=journal
 

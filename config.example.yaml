@@ -1,5 +1,5 @@
 device:
-  path: /dev/input/event13
+  name: "EX-G Pro TrackBall"
 
 reload:
   enabled: true
@@ -9,7 +9,7 @@ remaps:
   - description: right button down -> left meta down
     input:
       type: key
-      code: 278
+      code: BTN_BACK
       value: 1
     output:
       - key: KEY_LEFTMETA
@@ -18,8 +18,26 @@ remaps:
   - description: right button up -> left meta up
     input:
       type: key
-      code: 278
+      code: BTN_BACK
       value: 0
     output:
       - key: KEY_LEFTMETA
+        value: 0
+
+  - description: side button down -> enter down
+    input:
+      type: key
+      code: BTN_FORWARD
+      value: 1
+    output:
+      - key: KEY_ENTER
+        value: 1
+
+  - description: side button up -> enter up
+    input:
+      type: key
+      code: BTN_FORWARD
+      value: 0
+    output:
+      - key: KEY_ENTER
         value: 0
