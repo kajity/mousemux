@@ -1,4 +1,4 @@
-# mousemux 要件定義書
+# mousefold 要件定義書
 
 ## 1. 目的
 

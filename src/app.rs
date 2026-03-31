@@ -10,7 +10,7 @@ use tokio::signal::unix::{SignalKind, signal};
 use tokio::time::{Duration, Instant, interval};
 
 #[derive(Debug, Parser)]
-#[command(name = "mousemux")]
+#[command(name = "mousefold")]
 #[command(about = "Mouse to keyboard remapper daemon", version)]
 pub struct Cli {
     /// Path to the YAML configuration file.

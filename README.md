@@ -1,6 +1,6 @@
-# mousemux
+# mousefold
 
-`mousemux` is a Linux daemon that grabs one physical mouse, remaps selected mouse button events to a virtual keyboard, and forwards all other mouse movement, wheel, and button events to a virtual mouse.
+`mousefold` is a Linux daemon that grabs one physical mouse, remaps selected mouse button events to a virtual keyboard, and forwards all other mouse movement, wheel, and button events to a virtual mouse.
 
 ## Features
 
@@ -30,4 +30,4 @@ cargo run -- --check-config --config ./config.example.yaml
 
 ## Service
 
-An example unit file is available at `mousemux.service`.
+An example unit file is available at `mousefold.service`.

@@ -39,7 +39,7 @@ impl VirtualMouse {
             button_keys.insert(key);
         }
 
-        let device_name = format!("mousemux Virtual Mouse for {}", name);
+        let device_name = format!("mousefold Virtual Mouse for {}", name);
         let mut builder = VirtualDevice::builder()?
             .name(&device_name)
             .with_relative_axes(caps.supported_relative_axes())?;

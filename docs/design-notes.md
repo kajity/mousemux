@@ -1,4 +1,4 @@
-# mousemux 設計メモ
+# mousefold 設計メモ
 
 ## 1. 設計方針
 
@@ -229,14 +229,14 @@ After=systemd-udevd.service
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/mousemux --config /etc/mousemux/config.yaml
+ExecStart=/usr/local/bin/mousefold --config /etc/mousefold/config.yaml
 Restart=on-failure
 RestartSec=2
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/etc/mousemux
+ReadWritePaths=/etc/mousefold
 StandardOutput=journal
 StandardError=journal
 

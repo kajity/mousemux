@@ -401,7 +401,7 @@ mod tests {
     #[test]
     fn last_rule_wins_on_conflict() {
         let tmp_path = std::env::temp_dir().join(format!(
-            "mousemux-config-{}.yaml",
+            "mousefold-config-{}.yaml",
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()

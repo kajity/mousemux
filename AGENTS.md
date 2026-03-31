@@ -1,7 +1,7 @@
 # AGENTS.md
 
 ## Project
-mousemux
+mousefold
 
 ## Mission
 Linux 上で動く Rust 製の常駐デーモンを実装する。

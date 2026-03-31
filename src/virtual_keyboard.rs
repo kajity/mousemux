@@ -38,7 +38,7 @@ impl VirtualKeyboard {
 
         Ok(Self {
             device: VirtualDevice::builder()?
-                .name(&format!("mousemux Virtual Keyboard for {}", name))
+                .name(&format!("mousefold Virtual Keyboard for {}", name))
                 .with_keys(&attribute_set)?
                 .build()?,
         })

@@ -230,7 +230,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "mousemux"
+name = "mousefold"
 version = "0.1.0"
 dependencies = [
  "clap",
