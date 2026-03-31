@@ -10,6 +10,10 @@ pub struct Cli {
     #[arg(short, long, value_name = "FILE")]
     pub config: Option<PathBuf>,
 
+    /// Enable debug logging.
+    #[arg(short, long, global = true, hide = true, default_value_t = false)]
+    pub debug: bool,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 }
@@ -58,5 +62,14 @@ mod tests {
             .expect("cli should parse");
 
         assert!(matches!(cli.command, Some(Command::Check { .. })));
+    }
+
+    #[test]
+    fn hidden_debug_flag_parses() {
+        let cli = Cli::try_parse_from(["mousefold", "-d", "monitor", "--config", "config.yaml"])
+            .expect("cli should parse");
+
+        assert!(cli.debug);
+        assert!(matches!(cli.command, Some(Command::Monitor { .. })));
     }
 }

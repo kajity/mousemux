@@ -1,10 +1,6 @@
 device:
   name: "EX-G Pro TrackBall"
 
-reload:
-  enabled: true
-  debounce_ms: 250
-
 remaps:
   meta:
     description: back button -> left meta

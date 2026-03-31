@@ -8,6 +8,7 @@ use std::path::PathBuf;
 #[derive(Debug)]
 pub enum AppError {
     Cli(String),
+    Logger(log::SetLoggerError),
     Config(ConfigError),
     Device(DeviceError),
     Mouse(VirtualMouseError),
@@ -31,6 +32,7 @@ impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Cli(message) => write!(f, "{message}"),
+            Self::Logger(err) => write!(f, "failed to initialize logger: {err}"),
             Self::Config(err) => write!(f, "{err}"),
             Self::Device(err) => write!(f, "{err}"),
             Self::Mouse(err) => write!(f, "{err}"),
@@ -75,5 +77,11 @@ impl From<VirtualMouseError> for AppError {
 impl From<VirtualKeyboardError> for AppError {
     fn from(value: VirtualKeyboardError) -> Self {
         Self::Keyboard(value)
+    }
+}
+
+impl From<log::SetLoggerError> for AppError {
+    fn from(value: log::SetLoggerError) -> Self {
+        Self::Logger(value)
     }
 }

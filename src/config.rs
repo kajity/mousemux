@@ -4,20 +4,17 @@ use crate::router::{
 use evdev::KeyCode;
 use serde::Deserialize;
 use serde::de::{self, Deserializer};
-use serde_yaml::Mapping;
+use serde_yaml::{Mapping, Value};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::time::SystemTime;
 
 #[derive(Clone, Debug)]
 pub struct ActiveConfig {
     pub source_path: PathBuf,
-    pub source_modified: SystemTime,
     pub device_selector: DeviceSelector,
-    pub reload: ReloadConfig,
     pub rules: CompiledRules,
 }
 
@@ -35,23 +32,6 @@ impl DeviceSelector {
             Self::Path(path) => format!("device.path={}", path.display()),
             Self::ById(path) => format!("device.by_id={}", path.display()),
             Self::Name(name) => format!("device.name={name}"),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct ReloadConfig {
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-    #[serde(default = "default_reload_debounce_ms")]
-    pub debounce_ms: u64,
-}
-
-impl Default for ReloadConfig {
-    fn default() -> Self {
-        Self {
-            enabled: default_true(),
-            debounce_ms: default_reload_debounce_ms(),
         }
     }
 }
@@ -128,8 +108,8 @@ impl From<serde_yaml::Error> for ConfigError {
 #[derive(Debug, Deserialize)]
 struct ConfigFile {
     device: RawDeviceConfig,
-    #[serde(default)]
-    reload: ReloadConfig,
+    #[serde(rename = "reload", default)]
+    _reload: Option<Value>,
     remaps: Mapping,
     #[serde(default)]
     mode_switches: Option<ModeSwitchesConfig>,
@@ -206,29 +186,10 @@ struct NamedRemapRule {
 
 pub fn load_config(path: &Path) -> Result<LoadResult, ConfigError> {
     let content = fs::read_to_string(path)?;
-    let metadata = fs::metadata(path)?;
-    let modified = metadata.modified()?;
-    parse_config_content(path, modified, &content)
+    parse_config_content(path, &content)
 }
 
-pub fn has_config_changed(
-    path: &Path,
-    previous_modified: SystemTime,
-) -> Result<Option<SystemTime>, ConfigError> {
-    let metadata = fs::metadata(path)?;
-    let modified = metadata.modified()?;
-    if modified > previous_modified {
-        Ok(Some(modified))
-    } else {
-        Ok(None)
-    }
-}
-
-fn parse_config_content(
-    path: &Path,
-    modified: SystemTime,
-    content: &str,
-) -> Result<LoadResult, ConfigError> {
+fn parse_config_content(path: &Path, content: &str) -> Result<LoadResult, ConfigError> {
     let parsed: ConfigFile = serde_yaml::from_str(content)?;
     let named_remaps = parse_named_remaps(&parsed.remaps)?;
     validate_config(&parsed, &named_remaps)?;
@@ -238,9 +199,7 @@ fn parse_config_content(
     Ok(LoadResult {
         config: ActiveConfig {
             source_path: path.to_path_buf(),
-            source_modified: modified,
             device_selector: into_selector(parsed.device)?,
-            reload: parsed.reload,
             rules,
         },
         warnings,
@@ -567,14 +526,6 @@ fn describe_input(input: MouseButtonTrigger) -> String {
     format!("{:?}:{}", input.code, input.value)
 }
 
-fn default_true() -> bool {
-    true
-}
-
-fn default_reload_debounce_ms() -> u64 {
-    250
-}
-
 fn deserialize_key_code<'de, D>(deserializer: D) -> Result<KeyCode, D::Error>
 where
     D: Deserializer<'de>,
@@ -615,13 +566,11 @@ mod tests {
     use super::*;
     use evdev::KeyCode;
     use std::path::Path;
-    use std::time::SystemTime;
 
     #[test]
     fn omitted_values_expand_press_and_release() {
         let result = parse_config_content(
             Path::new("/tmp/test.yaml"),
-            SystemTime::UNIX_EPOCH,
             r#"
 device:
   name: "Example Mouse"
@@ -672,7 +621,6 @@ remaps:
     fn mode_switches_compile_named_modes() {
         let result = parse_config_content(
             Path::new("/tmp/test.yaml"),
-            SystemTime::UNIX_EPOCH,
             r#"
 device:
   name: "Example Mouse"
@@ -732,7 +680,6 @@ mode_switches:
     fn unknown_mode_remap_reference_fails_validation() {
         let err = parse_config_content(
             Path::new("/tmp/test.yaml"),
-            SystemTime::UNIX_EPOCH,
             r#"
 device:
   name: "Example Mouse"
@@ -764,7 +711,6 @@ mode_switches:
     fn hold_null_compiles_to_tap_behavior() {
         let result = parse_config_content(
             Path::new("/tmp/test.yaml"),
-            SystemTime::UNIX_EPOCH,
             r#"
 device:
   name: "Example Mouse"
@@ -799,7 +745,6 @@ remaps:
     fn hold_milliseconds_are_preserved() {
         let result = parse_config_content(
             Path::new("/tmp/test.yaml"),
-            SystemTime::UNIX_EPOCH,
             r#"
 device:
   name: "Example Mouse"
