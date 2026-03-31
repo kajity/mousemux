@@ -83,10 +83,21 @@ impl From<std::io::Error> for DeviceError {
 impl MouseDevice {
     /// Opens the configured mouse, captures its capabilities, and grabs the device.
     pub fn open_and_grab(selector: &DeviceSelector) -> Result<Self, DeviceError> {
+        Self::open(selector, true)
+    }
+
+    /// Opens the configured mouse without grabbing it for monitor mode.
+    pub fn open_for_monitor(selector: &DeviceSelector) -> Result<Self, DeviceError> {
+        Self::open(selector, false)
+    }
+
+    fn open(selector: &DeviceSelector, grab: bool) -> Result<Self, DeviceError> {
         let (resolved_path, mut device) = resolve_device(selector)?;
         let resolved_name = device.name().unwrap_or("unknown-device").to_string();
         let source_capabilities = read_source_capabilities(&device);
-        device.grab()?;
+        if grab {
+            device.grab()?;
+        }
         let event_stream = device.into_event_stream()?;
 
         Ok(Self {

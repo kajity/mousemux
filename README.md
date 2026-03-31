@@ -19,7 +19,19 @@ cargo run -- --config ./config.example.yaml
 Validate a config without starting the daemon:
 
 ```bash
-cargo run -- --check-config --config ./config.example.yaml
+cargo run -- check --config ./config.example.yaml
+```
+
+Monitor normalized events without grabbing the device:
+
+```bash
+cargo run -- monitor --config ./config.example.yaml
+```
+
+Request a running daemon to reload its config:
+
+```bash
+cargo run -- reload --config ./config.example.yaml
 ```
 
 ## Requirements

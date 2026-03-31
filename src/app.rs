@@ -1,44 +1,97 @@
+use crate::cli::{Cli, Command};
 use crate::config::{ConfigWarning, LoadResult, has_config_changed, load_config};
 use crate::device::{MouseDevice, NormalizedMouseEvent};
 use crate::error::AppError;
 use crate::router::{HoldBehavior, KeyStroke, RoutedAction, route};
 use crate::virtual_keyboard::VirtualKeyboard;
 use crate::virtual_mouse::VirtualMouse;
-use clap::Parser;
 use evdev::KeyCode;
 use notify_rust::Notification;
+use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::fs;
+use std::hash::{Hash, Hasher};
+use std::path::{Path, PathBuf};
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::time::{Duration, Instant, interval};
 
-#[derive(Debug, Parser)]
-#[command(name = "mousefold")]
-#[command(about = "Mouse to keyboard remapper daemon", version)]
-pub struct Cli {
-    /// Path to the YAML configuration file.
-    #[arg(short, long, value_name = "FILE")]
-    pub config: PathBuf,
-
-    /// Validate the configuration and exit.
-    #[arg(short = 'v', long, default_value_t = false)]
-    pub check_config: bool,
+pub async fn run(cli: Cli) -> Result<(), AppError> {
+    match cli.command {
+        Some(Command::Check { config }) => run_check(&config),
+        Some(Command::Monitor { config }) => run_monitor(&config).await,
+        Some(Command::Reload { config }) => run_reload_command(&config),
+        None => {
+            let config = cli
+                .config
+                .ok_or_else(|| AppError::Cli("missing --config for daemon mode".to_string()))?;
+            run_daemon(&config).await
+        }
+    }
 }
 
-pub async fn run(cli: Cli) -> Result<(), AppError> {
-    let load_result = load_config(&cli.config)?;
+fn run_check(config_path: &Path) -> Result<(), AppError> {
+    let load_result = load_config(config_path)?;
+    report_warnings(&load_result.warnings);
+    log_info(&format!(
+        "config OK: {} ({})",
+        config_path.display(),
+        load_result.config.device_selector.describe()
+    ));
+    Ok(())
+}
 
-    if cli.check_config {
-        report_warnings(&load_result.warnings);
-        log_info(&format!(
-            "config OK: {} ({})",
-            cli.config.display(),
-            load_result.config.device_selector.describe()
-        ));
-        return Ok(());
+async fn run_monitor(config_path: &Path) -> Result<(), AppError> {
+    let load_result = load_config(config_path)?;
+    report_warnings(&load_result.warnings);
+
+    let mut mouse_device = MouseDevice::open_for_monitor(&load_result.config.device_selector)?;
+    log_info(&format!(
+        "monitoring config={} selector={} resolved_device={} ({})",
+        config_path.display(),
+        load_result.config.device_selector.describe(),
+        mouse_device.resolved_path().display(),
+        mouse_device.resolved_name()
+    ));
+
+    let mut sigint = signal(SignalKind::interrupt()).map_err(AppError::Signal)?;
+    let mut sigterm = signal(SignalKind::terminate()).map_err(AppError::Signal)?;
+
+    loop {
+        tokio::select! {
+            _ = sigint.recv() => {
+                log_info("received SIGINT, stopping monitor");
+                break;
+            }
+            _ = sigterm.recv() => {
+                log_info("received SIGTERM, stopping monitor");
+                break;
+            }
+            event = mouse_device.next_event() => {
+                println!("{:?}", event?);
+            }
+        }
     }
 
+    Ok(())
+}
+
+fn run_reload_command(config_path: &Path) -> Result<(), AppError> {
+    let pid_path = pid_file_path(config_path);
+    let pid = read_pid_file(&pid_path)?;
+    send_sighup(pid)?;
+    log_info(&format!(
+        "requested reload for config={} pid={} via {}",
+        config_path.display(),
+        pid,
+        pid_path.display()
+    ));
+    Ok(())
+}
+
+async fn run_daemon(config_path: &Path) -> Result<(), AppError> {
+    let load_result = load_config(config_path)?;
     let mut runtime = Runtime::from_load_result(load_result)?;
+    let _pid_file = PidFileGuard::create(config_path)?;
 
     log_info(&format!(
         "started with config={} selector={} resolved_device={} ({})",
@@ -50,12 +103,12 @@ pub async fn run(cli: Cli) -> Result<(), AppError> {
 
     let mut sigint = signal(SignalKind::interrupt()).map_err(AppError::Signal)?;
     let mut sigterm = signal(SignalKind::terminate()).map_err(AppError::Signal)?;
-    let mut reload_tick = interval(if runtime.config.reload.enabled {
-        Duration::from_millis(runtime.config.reload.debounce_ms)
-    } else {
-        Duration::MAX
-    });
+    let mut sighup = signal(SignalKind::hangup()).map_err(AppError::Signal)?;
+    let mut reload_tick = interval(Duration::from_millis(250));
     let mut hold_tick = interval(Duration::from_millis(5));
+    let mut last_reload_attempt = Instant::now()
+        .checked_sub(Duration::from_millis(runtime.config.reload.debounce_ms))
+        .unwrap_or_else(Instant::now);
 
     loop {
         tokio::select! {
@@ -66,6 +119,9 @@ pub async fn run(cli: Cli) -> Result<(), AppError> {
             _ = sigterm.recv() => {
                 log_info("received SIGTERM, shutting down");
                 break;
+            }
+            _ = sighup.recv() => {
+                runtime.try_reload("signal").await?;
             }
             event = runtime.mouse_device.next_event() => {
                 runtime.handle_event(event?)?;
@@ -78,23 +134,14 @@ pub async fn run(cli: Cli) -> Result<(), AppError> {
                     continue;
                 }
 
-                match runtime.apply_reload().await {
-                    Ok(()) => {
-                        log_info(&format!(
-                            "reloaded config={} selector={} resolved_device={} ({})",
-                            runtime.config.source_path.display(),
-                            runtime.config.device_selector.describe(),
-                            runtime.mouse_device.resolved_path().display(),
-                            runtime.mouse_device.resolved_name()
-                        ));
-                    }
-                    Err(err) => {
-                        log_warn(&format!(
-                            "reload failed for {}: {err}; keeping previous configuration",
-                            runtime.config.source_path.display()
-                        ));
-                    }
+                let now = Instant::now();
+                if now.duration_since(last_reload_attempt).as_millis()
+                    < u128::from(runtime.config.reload.debounce_ms)
+                {
+                    continue;
                 }
+                last_reload_attempt = now;
+                runtime.try_reload("watcher").await?;
             }
         }
     }
@@ -158,6 +205,28 @@ impl Runtime {
             pressed_output_counts: HashMap::new(),
             scheduled_releases: Vec::new(),
         })
+    }
+
+    async fn try_reload(&mut self, reason: &str) -> Result<(), AppError> {
+        match self.apply_reload().await {
+            Ok(()) => {
+                log_info(&format!(
+                    "reloaded ({reason}) config={} selector={} resolved_device={} ({})",
+                    self.config.source_path.display(),
+                    self.config.device_selector.describe(),
+                    self.mouse_device.resolved_path().display(),
+                    self.mouse_device.resolved_name()
+                ));
+                Ok(())
+            }
+            Err(err) => {
+                log_warn(&format!(
+                    "reload failed ({reason}) for {}: {err}; keeping previous configuration",
+                    self.config.source_path.display()
+                ));
+                Ok(())
+            }
+        }
     }
 
     async fn apply_reload(&mut self) -> Result<(), AppError> {
@@ -398,6 +467,78 @@ impl Runtime {
 
         log_info(&format!("mode switched: {previous_mode} -> {next_mode}"));
         notify_mode_change(next_mode);
+    }
+}
+
+struct PidFileGuard {
+    path: PathBuf,
+    pid: u32,
+}
+
+impl PidFileGuard {
+    fn create(config_path: &Path) -> Result<Self, AppError> {
+        let path = pid_file_path(config_path);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|source| AppError::PidFile {
+                path: parent.to_path_buf(),
+                source,
+            })?;
+        }
+
+        let pid = std::process::id();
+        fs::write(&path, pid.to_string()).map_err(|source| AppError::PidFile {
+            path: path.clone(),
+            source,
+        })?;
+
+        log_info(&format!("wrote pid file {}", path.display()));
+        Ok(Self { path, pid })
+    }
+}
+
+impl Drop for PidFileGuard {
+    fn drop(&mut self) {
+        let should_remove = fs::read_to_string(&self.path)
+            .ok()
+            .and_then(|content| content.trim().parse::<u32>().ok())
+            == Some(self.pid);
+
+        if should_remove {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
+}
+
+fn pid_file_path(config_path: &Path) -> PathBuf {
+    let normalized = fs::canonicalize(config_path).unwrap_or_else(|_| config_path.to_path_buf());
+    let mut hasher = DefaultHasher::new();
+    normalized.hash(&mut hasher);
+    PathBuf::from("/run/mousefold").join(format!("mousefold-{:016x}.pid", hasher.finish()))
+}
+
+fn read_pid_file(path: &Path) -> Result<i32, AppError> {
+    let content = fs::read_to_string(path).map_err(|source| AppError::PidFile {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    content
+        .trim()
+        .parse::<i32>()
+        .map_err(|_| AppError::PidFileFormat {
+            path: path.to_path_buf(),
+            content,
+        })
+}
+
+fn send_sighup(pid: i32) -> Result<(), AppError> {
+    let result = unsafe { libc::kill(pid, libc::SIGHUP) };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(AppError::SignalSend {
+            pid,
+            source: std::io::Error::last_os_error(),
+        })
     }
 }
 
